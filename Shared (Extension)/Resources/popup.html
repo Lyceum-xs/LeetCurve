@@ -43,7 +43,6 @@
     <!-- ======== Tab Bar ======== -->
     <nav class="tab-bar">
       <button class="tab active" data-tab="queue">复习队列</button>
-      <button class="tab" data-tab="completed">已完成</button>
       <button class="tab" data-tab="mastered">已掌握</button>
       <button class="tab" data-tab="recent">近一周</button>
       <button class="tab" data-tab="heatmap">热力图</button>
@@ -75,36 +74,6 @@
         <div class="empty-state" id="empty-state">
           <div class="empty-icon">📚</div>
           <p class="empty-title">还没有题目</p>
-          <p class="empty-hint">去 LeetCode 提交一道题试试吧！</p>
-        </div>
-      </div>
-    </div>
-
-    <!-- ======== Tab: 已完成 ======== -->
-    <div class="tab-content" id="tab-completed">
-      <!-- 搜索与筛选栏 -->
-      <div class="completed-toolbar">
-        <div class="search-box-small">
-          <input type="text" id="completed-search" placeholder="🔍 搜索题目名称或题号..." class="search-input-small">
-        </div>
-        <div class="tag-filter-container">
-          <button class="btn btn-sm btn-ghost" id="completed-tag-filter-btn">
-            🏷️ 标签筛选 <span id="completed-tag-count"></span>
-          </button>
-          <div class="tag-filter-dropdown" id="completed-tag-dropdown" style="display:none">
-            <div class="tag-filter-header">
-              <span>选择标签</span>
-              <button class="btn-link" id="completed-tag-clear">清除</button>
-            </div>
-            <div class="tag-filter-list" id="completed-tag-list"></div>
-          </div>
-        </div>
-      </div>
-      <!-- 已完成列表 -->
-      <div class="completed-list" id="completed-list">
-        <div class="empty-state">
-          <div class="empty-icon">📚</div>
-          <p class="empty-title">还没有完成的题目</p>
           <p class="empty-hint">去 LeetCode 提交一道题试试吧！</p>
         </div>
       </div>

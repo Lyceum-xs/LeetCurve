@@ -27,11 +27,6 @@
           <span class="nav-label">复习队列</span>
           <span class="nav-badge" id="nav-badge-due"></span>
         </button>
-        <button class="nav-item" data-view="completed">
-          <span class="nav-icon">📚</span>
-          <span class="nav-label">已完成</span>
-          <span class="nav-badge" id="nav-badge-completed"></span>
-        </button>
         <button class="nav-item" data-view="mastered">
           <span class="nav-icon">🏆</span>
           <span class="nav-label">已掌握</span>
@@ -181,42 +176,6 @@
             <div class="empty-icon">📚</div>
             <p class="empty-title">还没有题目</p>
             <p class="empty-hint">通过 LeetCode 自动捕获，或手动添加一道题试试！</p>
-          </div>
-        </div>
-      </section>
-
-      <!-- ====== View: Completed ====== -->
-      <section class="view" id="view-completed">
-        <div class="completed-header">
-          <h3 class="section-heading">📚 已完成题目</h3>
-          <p class="section-sub">所有 Accepted 的题目，方便立即复习和整理笔记</p>
-        </div>
-        
-        <!-- 搜索与筛选工具栏 -->
-        <div class="completed-toolbar">
-          <div class="search-box">
-            <span class="search-icon">🔍</span>
-            <input type="text" id="completed-search-web" placeholder="搜索题目名称或题号..." class="search-input">
-          </div>
-          <div class="tag-filter-web">
-            <button class="btn btn-outline" id="completed-tag-btn-web">
-              🏷️ 标签筛选 <span id="completed-tag-count-web"></span>
-            </button>
-            <div class="tag-filter-dropdown-web" id="completed-tag-dropdown-web" style="display:none">
-              <div class="tag-filter-header">
-                <span>选择标签（可多选）</span>
-                <button class="btn-link" id="completed-tag-clear-web">清除全部</button>
-              </div>
-              <div class="tag-filter-list" id="completed-tag-list-web"></div>
-            </div>
-          </div>
-        </div>
-        
-        <div class="completed-grid" id="completed-grid">
-          <div class="empty-state">
-            <div class="empty-icon">📚</div>
-            <p class="empty-title">还没有完成的题目</p>
-            <p class="empty-hint">去 LeetCode 提交一道题试试吧！</p>
           </div>
         </div>
       </section>

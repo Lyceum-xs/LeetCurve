@@ -158,8 +158,7 @@ body {
 }
 
 .stat-color-danger  { color: var(--danger); }
-.stat-color-accent  { color: var(--accent); transition: opacity var(--transition); }
-.stat-color-accent:hover { opacity: 0.7; }
+.stat-color-accent  { color: var(--accent); }
 .stat-color-success { color: var(--success); }
 .stat-color-warning { color: var(--warning); }
 
@@ -471,115 +470,6 @@ body {
   max-height: 48px;
   overflow: hidden;
   line-height: 1.4;
-}
-
-/* ================================================================
- *  Completed List (已完成)
- * ================================================================ */
-.completed-toolbar {
-  padding: 10px 12px;
-  background: var(--bg-primary);
-  border-bottom: 1px solid var(--border);
-  display: flex;
-  gap: 8px;
-  align-items: center;
-  position: sticky;
-  top: 0;
-  z-index: 10;
-}
-
-.search-box-small {
-  flex: 1;
-  position: relative;
-}
-
-.search-input-small {
-  width: 100%;
-  padding: 6px 10px;
-  font-size: 12px;
-  color: var(--text-primary);
-  background: var(--bg-tertiary);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  outline: none;
-  transition: border-color var(--transition);
-}
-
-.search-input-small:focus { border-color: var(--accent); }
-
-.tag-filter-container {
-  position: relative;
-}
-
-.tag-filter-dropdown {
-  position: absolute;
-  top: 100%;
-  right: 0;
-  margin-top: 4px;
-  background: var(--bg-primary);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  box-shadow: var(--shadow-lg);
-  width: 280px;
-  max-height: 320px;
-  overflow-y: auto;
-  z-index: 100;
-}
-
-.tag-filter-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 10px 12px;
-  border-bottom: 1px solid var(--border);
-  font-size: 12px;
-  font-weight: 600;
-}
-
-.btn-link {
-  background: none;
-  border: none;
-  color: var(--accent);
-  font-size: 11px;
-  font-weight: 600;
-  cursor: pointer;
-  padding: 0;
-}
-
-.btn-link:hover {
-  text-decoration: underline;
-}
-
-.tag-filter-list {
-  padding: 8px;
-}
-
-.tag-filter-item {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 6px 8px;
-  border-radius: var(--radius-sm);
-  cursor: pointer;
-  transition: background var(--transition);
-}
-
-.tag-filter-item:hover {
-  background: var(--bg-hover);
-}
-
-.tag-filter-item input[type="checkbox"] {
-  cursor: pointer;
-}
-
-.tag-filter-item label {
-  flex: 1;
-  font-size: 12px;
-  cursor: pointer;
-}
-
-.completed-list {
-  padding: 8px 12px;
 }
 
 /* ================================================================
@@ -935,15 +825,12 @@ body {
 .modal-overlay.show { display: flex; }
 
 .modal {
-  width: 800px;
-  max-height: 60vh;
+  width: 380px;
   background: var(--bg-primary);
   border: 1px solid var(--border);
   border-radius: var(--radius);
   box-shadow: var(--shadow);
   animation: modalIn 0.2s ease;
-  display: flex;
-  flex-direction: column;
 }
 
 @keyframes modalIn {
@@ -972,12 +859,7 @@ body {
 
 .modal-close:hover { background: var(--bg-hover); color: var(--text-primary); }
 
-.modal-body { 
-  padding: 16px; 
-  flex: 1;
-  overflow-y: auto;
-  min-height: 0;
-}
+.modal-body { padding: 16px; }
 
 /* Modal Tabs */
 .modal-tabs {
@@ -1008,7 +890,7 @@ body {
 
 .note-textarea {
   width: 100%;
-  min-height: 200px;
+  height: 140px;
   padding: 10px;
   font-size: 13px;
   font-family: inherit;
@@ -1052,9 +934,9 @@ body {
 
 .code-textarea {
   width: 100%;
-  min-height: 280px;
+  height: 180px;
   padding: 10px;
-  font-size: 14px;
+  font-size: 12px;
   font-family: 'SFMono-Regular', 'Consolas', 'Liberation Mono', 'Menlo', monospace;
   line-height: 1.5;
   color: var(--text-primary);
