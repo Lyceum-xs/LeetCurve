@@ -4,6 +4,9 @@
 
 **解决刷题"遗忘快"的核心痛点。** 通过自动监听提交状态，利用动态优先级算法管理复习队列，实现自动化、无感化的复习管理。同时提供可独立运行的 Web 面板，支持脱离插件使用。
 
+[![GitHub](https://img.shields.io/badge/GitHub-LeetCurve-orange?logo=github)](https://github.com/Lyceum-xs/LeetCurve)
+[![License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+
 ---
 
 ## 功能特性
@@ -12,6 +15,7 @@
 - **智能检测**：仅在 LeetCode 题目页面检测到 `Accepted` 状态时触发
 - **冷冻期机制**：同一题目 1 小时内的多次 AC 仅计为一次，防止曲线跳级
 - **自动复习推进**：已在队列中的题目再次 AC，自动推进复习阶段
+- **代码自动抓取**：AC 时自动从 Monaco Editor / 请求体中提取完整源代码，并记录完整提交历史
 
 ### 🧠 科学复习算法
 - **艾宾浩斯曲线**：6 个复习阶段 (1天 → 2天 → 4天 → 7天 → 15天 → 30天 → 掌握)
@@ -20,10 +24,13 @@
 - **标签权重**：可对 DP、BFS 等特定标签设置权重偏移
 
 ### 📊 极简 UI + 完整 Web 面板
-- **Popup 弹窗**：快速查看队列、一键跳转
+- **Popup 弹窗**：快速查看队列、一键跳转，支持 5 个功能标签页
 - **Web Dashboard**：完整仪表盘，独立运行，包含手动添加题目、数据可视化等高级功能
+- **已完成列表**：展示所有 AC 过的题目，支持按题目名称/ID 搜索和多标签筛选
+- **已掌握列表**：展示完成全部 6 个复习阶段的题目
+- **近一周动态**：显示过去 7 天内新 AC 或完成复习的题目
 - **标签筛选**：按 Tag / 难度 / 状态多维度过滤
-- **极简笔记**：每道题一个文本框，记录核心思路
+- **极简笔记 + 代码记录**：每道题支持文本笔记和代码记录，可浏览完整代码提交历史
 - **学习热力图**：仿 GitHub 风格，可视化每日刷题活跃度
 - **暗色/亮色双主题**
 
@@ -41,7 +48,7 @@ LeetCurve/
 ├── manifest.json              # Chrome MV3 配置
 ├── background.js              # Service Worker (核心逻辑)
 ├── content/
-│   ├── inject.js              # MAIN World - fetch/XHR 拦截
+│   ├── inject.js              # MAIN World - fetch/XHR 拦截 & 代码抓取
 │   └── content.js             # ISOLATED World - 桥接 & DOM 提取
 ├── popup/
 │   ├── popup.html             # Popup 弹窗页面
@@ -51,6 +58,10 @@ LeetCurve/
 │   ├── index.html             # 完整仪表盘页面
 │   ├── style.css              # 全页面响应式样式
 │   └── app.js                 # 完整业务逻辑 + 存储适配层
+├── Shared (Extension)/        # Safari 扩展资源
+│   └── Resources/             # Safari 适配的完整资源副本
+├── tests/
+│   └── test.js                # 综合功能测试（110 项）
 ├── icons/                     # 扩展图标
 ├── scripts/
 │   └── generate-icons.js      # 图标生成脚本
@@ -106,7 +117,7 @@ LeetCurve/
 
 ```bash
 # 1. 克隆仓库
-git clone <repo-url>
+git clone https://github.com/Lyceum-xs/LeetCurve.git
 cd LeetCurve
 
 # 2. 生成图标
@@ -137,12 +148,35 @@ npx serve web
 
 ---
 
+## 运行测试
+
+```bash
+node tests/test.js
+```
+
+测试覆盖 **23 个测试套件、110 项断言**，涵盖：
+
+| 类别 | 测试内容 |
+|------|----------|
+| 核心算法 | 艾宾浩斯复习阶段常量、难度权重系数、优先级计算公式 |
+| 提交处理 | 新题目创建、冷冻期拦截、阶段推进、stage 边界、空 slug |
+| 代码提取 | 有/无代码提交、代码历史追加、语言标识 |
+| 数据管理 | 活动日志记录、连续天数计算、数据导出/导入格式 |
+| 前端逻辑 | 已完成列表搜索筛选、已掌握列表筛选、近一周动态筛选 |
+| UI 功能 | 标签实时更新、热力图等级、链接属性验证、相对时间格式化 |
+| 数据完整性 | 题目对象全字段校验、LeetCode CN/COM 域名处理 |
+
+---
+
 ## Web 面板功能详情
 
 | 页面 | 功能 |
 |------|------|
 | **仪表盘** | 统计概览（待复习/总数/已掌握/连续天数）、最紧急题目列表、难度分布图、阶段分布图、近 90 天迷你热力图 |
-| **复习队列** | 搜索 + 多维度筛选、按优先级排序的题目卡片、一键跳转 LeetCode、编辑笔记 |
+| **复习队列** | 搜索 + 多维度筛选、按优先级排序的题目卡片、一键跳转 LeetCode（新标签页）、编辑笔记与代码 |
+| **已完成** | 所有 AC 过的题目列表，支持实时搜索（题名/题号）与多标签 AND 筛选 |
+| **已掌握** | Stage 6 完全掌握的题目，按最近复习时间排序 |
+| **近一周** | 过去 7 天内新 AC 或复习过的题目，附相对时间 |
 | **热力图** | 完整 365 天 GitHub 风格热力图、总活动次数/活跃天数/最长连续/当前连续统计 |
 | **添加题目** | 手动录入题号/名称/难度/标签/链接/笔记 |
 | **设置** | 标签权重管理、复习阶段说明、数据导出/导入/清空 |
@@ -169,9 +203,9 @@ npx serve web
 priority = overdueRatio × difficultyWeight × tagWeight
 ```
 
-- **overdueRatio** = `(已过时间 - 预定间隔) / 预定间隔`
+- **overdueRatio** = `max(0, (已过时间 - 预定间隔) / 预定间隔)`
   - `> 0`：已逾期，需要复习
-  - `< 0`：尚未到期
+  - `= 0`：尚未到期（钳制到非负）
 - **difficultyWeight**：Easy = 0.8, Medium = 1.0, Hard = 1.5
 - **tagWeight**：取该题所有标签中用户设定的最大权重值（默认 1.0）
 
@@ -191,10 +225,16 @@ priority = overdueRatio × difficultyWeight × tagWeight
   "difficulty": "Easy",
   "tags": ["Array", "Hash Table"],
   "url": "https://leetcode.com/problems/two-sum/",
+  "origin": "com",
   "first_accepted_time": 1700000000000,
   "last_review_time": 1700100000000,
   "stage": 2,
   "note": "用 HashMap 存储已遍历元素的下标",
+  "code": "var twoSum = function(nums, target) { ... }",
+  "codeHistory": [
+    { "code": "var twoSum = ...", "lang": "javascript", "time": 1700000000000 },
+    { "code": "var twoSum = ...(优化版)", "lang": "javascript", "time": 1700100000000 }
+  ],
   "review_history": [1700000000000, 1700100000000],
   "priority_score": 1.35
 }
@@ -208,7 +248,7 @@ priority = overdueRatio × difficultyWeight × tagWeight
 |------|------|
 | Chrome Manifest V3 | 扩展规范 |
 | Service Worker | 后台逻辑 (background.js) |
-| Content Scripts (MAIN + ISOLATED) | 页面数据采集 |
+| Content Scripts (MAIN + ISOLATED) | 页面数据采集 + 代码抓取 |
 | chrome.storage.local / localStorage | 持久化（自动适配） |
 | chrome.alarms | 定时优先级刷新 |
 | Vanilla JS / CSS | 零依赖前端 |
@@ -217,7 +257,7 @@ priority = overdueRatio × difficultyWeight × tagWeight
 
 ## 兼容性
 
-- **浏览器**：Chrome 111+（扩展需要 `"world": "MAIN"` 支持）
+- **浏览器**：Chrome 111+（扩展需要 `"world": "MAIN"` 支持）、Safari（通过 Shared Extension）
 - **Web 面板**：任何现代浏览器（Chrome, Firefox, Safari, Edge）
 - **网站**：`leetcode.com`（国际版）、`leetcode.cn`（中国版）
 
@@ -232,6 +272,21 @@ priority = overdueRatio × difficultyWeight × tagWeight
 | Popup | 右键插件图标 → "审查弹出式窗口" |
 | Web 面板 | 直接打开 DevTools |
 | 查看存储 | Background Console: `chrome.storage.local.get(null, d => console.log(d))` |
+| 运行测试 | `node tests/test.js` |
+
+---
+
+## 贡献
+
+欢迎提交 Issue 和 Pull Request！
+
+1. Fork 本项目
+2. 创建功能分支：`git checkout -b feature/awesome-feature`
+3. 提交更改：`git commit -m "Add awesome feature"`
+4. 推送到远程：`git push origin feature/awesome-feature`
+5. 提交 Pull Request
+
+项目地址：[https://github.com/Lyceum-xs/LeetCurve](https://github.com/Lyceum-xs/LeetCurve)
 
 ---
 

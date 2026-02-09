@@ -366,7 +366,7 @@ function renderDashboard() {
       const url = p.url || `${fb}/problems/${p.slug}/`;
       return `<div class="urgent-item">
         <span class="diff-badge ${p.difficulty.toLowerCase()}">${p.difficulty[0]}</span>
-        <a href="${esc(url)}" target="_blank">${esc(name)}</a>
+        <a href="${esc(url)}" target="_blank" rel="noopener">${esc(name)}</a>
         <span class="urgent-overdue">${getTimeStr(p)}</span>
       </div>`;
     }).join('');
