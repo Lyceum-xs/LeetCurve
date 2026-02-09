@@ -1,0 +1,339 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>LeetCurve — 智能复习面板</title>
+  <link rel="stylesheet" href="style.css">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📈</text></svg>">
+</head>
+<body>
+  <div id="app">
+
+    <!-- ==================== Sidebar ==================== -->
+    <aside class="sidebar" id="sidebar">
+      <div class="sidebar-brand">
+        <span class="brand-icon">📈</span>
+        <h1 class="brand-text">LeetCurve</h1>
+      </div>
+
+      <nav class="sidebar-nav">
+        <button class="nav-item active" data-view="dashboard">
+          <span class="nav-icon">📊</span>
+          <span class="nav-label">仪表盘</span>
+        </button>
+        <button class="nav-item" data-view="queue">
+          <span class="nav-icon">📝</span>
+          <span class="nav-label">复习队列</span>
+          <span class="nav-badge" id="nav-badge-due"></span>
+        </button>
+        <button class="nav-item" data-view="heatmap">
+          <span class="nav-icon">🔥</span>
+          <span class="nav-label">热力图</span>
+        </button>
+        <button class="nav-item" data-view="add">
+          <span class="nav-icon">➕</span>
+          <span class="nav-label">添加题目</span>
+        </button>
+        <button class="nav-item" data-view="settings">
+          <span class="nav-icon">⚙️</span>
+          <span class="nav-label">设置</span>
+        </button>
+      </nav>
+
+      <div class="sidebar-footer">
+        <div class="env-badge" id="env-badge"></div>
+      </div>
+    </aside>
+
+    <!-- ==================== Main Content ==================== -->
+    <main class="main">
+
+      <!-- Top Bar -->
+      <header class="topbar">
+        <h2 class="topbar-title" id="topbar-title">仪表盘</h2>
+        <div class="topbar-actions">
+          <button class="btn btn-outline btn-sm" id="btn-export">📤 导出</button>
+          <button class="btn btn-outline btn-sm" id="btn-import">📥 导入</button>
+          <input type="file" id="import-file" accept=".json" hidden>
+        </div>
+      </header>
+
+      <!-- ====== View: Dashboard ====== -->
+      <section class="view active" id="view-dashboard">
+        <!-- Stats Cards -->
+        <div class="stats-grid">
+          <div class="stat-card stat-card-due">
+            <div class="stat-card-icon">⏰</div>
+            <div class="stat-card-body">
+              <div class="stat-card-value" id="dash-due">0</div>
+              <div class="stat-card-label">待复习</div>
+            </div>
+          </div>
+          <div class="stat-card stat-card-total">
+            <div class="stat-card-icon">📚</div>
+            <div class="stat-card-body">
+              <div class="stat-card-value" id="dash-total">0</div>
+              <div class="stat-card-label">总题数</div>
+            </div>
+          </div>
+          <div class="stat-card stat-card-mastered">
+            <div class="stat-card-icon">✅</div>
+            <div class="stat-card-body">
+              <div class="stat-card-value" id="dash-mastered">0</div>
+              <div class="stat-card-label">已掌握</div>
+            </div>
+          </div>
+          <div class="stat-card stat-card-streak">
+            <div class="stat-card-icon">🔥</div>
+            <div class="stat-card-body">
+              <div class="stat-card-value" id="dash-streak">0</div>
+              <div class="stat-card-label">天连续</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Dashboard body: recent + difficulty breakdown -->
+        <div class="dash-grid">
+          <!-- Urgent Queue -->
+          <div class="card">
+            <div class="card-head">
+              <h3>🚨 最紧急的题目</h3>
+              <button class="btn btn-ghost btn-xs" id="dash-go-queue">查看全部 →</button>
+            </div>
+            <div class="card-body" id="dash-urgent-list">
+              <p class="text-muted">暂无数据</p>
+            </div>
+          </div>
+
+          <!-- Difficulty Distribution -->
+          <div class="card">
+            <div class="card-head">
+              <h3>📊 难度分布</h3>
+            </div>
+            <div class="card-body" id="dash-difficulty">
+              <p class="text-muted">暂无数据</p>
+            </div>
+          </div>
+
+          <!-- Mini Heatmap -->
+          <div class="card card-wide">
+            <div class="card-head">
+              <h3>🔥 近 90 天活跃度</h3>
+              <button class="btn btn-ghost btn-xs" id="dash-go-heatmap">查看完整 →</button>
+            </div>
+            <div class="card-body">
+              <div class="mini-heatmap" id="dash-mini-heatmap"></div>
+            </div>
+          </div>
+
+          <!-- Stage Overview -->
+          <div class="card card-wide">
+            <div class="card-head">
+              <h3>📈 阶段分布</h3>
+            </div>
+            <div class="card-body" id="dash-stages">
+              <p class="text-muted">暂无数据</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ====== View: Queue ====== -->
+      <section class="view" id="view-queue">
+        <div class="queue-toolbar">
+          <div class="search-box">
+            <span class="search-icon">🔍</span>
+            <input type="text" id="queue-search" placeholder="搜索题目名称 / 题号..." class="search-input">
+          </div>
+          <select id="queue-filter-tag" class="filter-select">
+            <option value="">全部标签</option>
+          </select>
+          <select id="queue-filter-diff" class="filter-select">
+            <option value="">全部难度</option>
+            <option value="Easy">Easy</option>
+            <option value="Medium">Medium</option>
+            <option value="Hard">Hard</option>
+          </select>
+          <select id="queue-filter-status" class="filter-select">
+            <option value="due">待复习</option>
+            <option value="all">全部</option>
+            <option value="mastered">已掌握</option>
+          </select>
+        </div>
+
+        <div class="queue-grid" id="queue-grid">
+          <div class="empty-state">
+            <div class="empty-icon">📚</div>
+            <p class="empty-title">还没有题目</p>
+            <p class="empty-hint">通过 LeetCode 自动捕获，或手动添加一道题试试！</p>
+          </div>
+        </div>
+      </section>
+
+      <!-- ====== View: Heatmap ====== -->
+      <section class="view" id="view-heatmap">
+        <div class="heatmap-panel">
+          <h3 class="section-heading">学习热力图</h3>
+          <p class="section-sub">过去一年的每日刷题记录</p>
+          <div class="heatmap-full-wrapper">
+            <div class="heatmap-months-row" id="hm-months"></div>
+            <div class="heatmap-main">
+              <div class="heatmap-day-labels">
+                <span></span><span>Mon</span><span></span><span>Wed</span><span></span><span>Fri</span><span></span>
+              </div>
+              <div class="heatmap-grid-scroll">
+                <div class="heatmap-grid" id="hm-grid"></div>
+              </div>
+            </div>
+          </div>
+          <div class="heatmap-legend">
+            <span>Less</span>
+            <div class="legend-cell level-0"></div>
+            <div class="legend-cell level-1"></div>
+            <div class="legend-cell level-2"></div>
+            <div class="legend-cell level-3"></div>
+            <div class="legend-cell level-4"></div>
+            <span>More</span>
+          </div>
+        </div>
+
+        <div class="heatmap-stats-grid" id="hm-stats-grid"></div>
+      </section>
+
+      <!-- ====== View: Add Problem ====== -->
+      <section class="view" id="view-add">
+        <div class="form-card">
+          <h3 class="section-heading">手动添加题目</h3>
+          <p class="section-sub">适用于未安装插件时手动录入已完成的题目</p>
+          <form id="add-form" class="add-form" autocomplete="off">
+            <div class="form-row">
+              <div class="form-group">
+                <label for="add-id">题号</label>
+                <input type="text" id="add-id" placeholder="如 1" class="input-field">
+              </div>
+              <div class="form-group form-group-grow">
+                <label for="add-title">题目名称 <span class="required">*</span></label>
+                <input type="text" id="add-title" placeholder="如 Two Sum" class="input-field" required>
+              </div>
+            </div>
+            <div class="form-row">
+              <div class="form-group">
+                <label for="add-difficulty">难度</label>
+                <select id="add-difficulty" class="input-field">
+                  <option value="Easy">Easy</option>
+                  <option value="Medium" selected>Medium</option>
+                  <option value="Hard">Hard</option>
+                </select>
+              </div>
+              <div class="form-group form-group-grow">
+                <label for="add-tags">标签 <span class="hint">（逗号分隔）</span></label>
+                <input type="text" id="add-tags" placeholder="如 Array, Hash Table, DP" class="input-field">
+              </div>
+            </div>
+            <div class="form-row">
+              <div class="form-group form-group-grow">
+                <label for="add-url">链接</label>
+                <input type="url" id="add-url" placeholder="https://leetcode.com/problems/two-sum/" class="input-field">
+              </div>
+            </div>
+            <div class="form-row">
+              <div class="form-group form-group-grow">
+                <label for="add-note">笔记</label>
+                <textarea id="add-note" placeholder="记录核心思路..." class="input-field textarea-field" rows="3"></textarea>
+              </div>
+            </div>
+            <div class="form-actions">
+              <button type="reset" class="btn btn-ghost">重置</button>
+              <button type="submit" class="btn btn-primary">添加到复习队列</button>
+            </div>
+          </form>
+        </div>
+      </section>
+
+      <!-- ====== View: Settings ====== -->
+      <section class="view" id="view-settings">
+        <!-- Tag Weights -->
+        <div class="card">
+          <div class="card-head"><h3>🏷️ 标签权重</h3></div>
+          <div class="card-body">
+            <p class="section-sub" style="margin-bottom:12px">为特定算法标签设置优先权重（默认 1.0），权重越高越优先复习</p>
+            <div id="settings-tag-list"></div>
+            <div class="tag-weight-form">
+              <input type="text" id="stag-name" placeholder="标签名 (如 DP)" class="input-field input-sm">
+              <input type="number" id="stag-weight" value="1.5" min="0.1" max="5" step="0.1" class="input-field input-sm input-num">
+              <button class="btn btn-primary btn-sm" id="stag-add">添加</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Stages Info -->
+        <div class="card">
+          <div class="card-head"><h3>📈 复习阶段</h3></div>
+          <div class="card-body">
+            <p class="section-sub" style="margin-bottom:12px">基于艾宾浩斯遗忘曲线的间隔复习策略</p>
+            <div class="stages-visual" id="settings-stages"></div>
+          </div>
+        </div>
+
+        <!-- Data Management -->
+        <div class="card">
+          <div class="card-head"><h3>💾 数据管理</h3></div>
+          <div class="card-body">
+            <div class="settings-btn-row">
+              <button class="btn btn-outline" id="btn-export-2">📤 导出全部数据</button>
+              <button class="btn btn-outline" id="btn-import-2">📥 导入备份数据</button>
+              <button class="btn btn-danger-outline" id="btn-clear">🗑️ 清空所有数据</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- About -->
+        <div class="card">
+          <div class="card-head"><h3>ℹ️ 关于</h3></div>
+          <div class="card-body">
+            <p class="about-info">
+              <strong>LeetCurve</strong> v1.0.0<br>
+              基于艾宾浩斯遗忘曲线的 LeetCode 智能复习管理工具<br>
+              <span class="text-muted">零依赖 · 隐私优先 · 数据本地化</span>
+            </p>
+          </div>
+        </div>
+      </section>
+
+    </main>
+
+    <!-- ==================== Note & Code Modal ==================== -->
+    <div class="modal-overlay" id="note-modal">
+      <div class="modal">
+        <div class="modal-header">
+          <h3 id="note-modal-title">编辑笔记</h3>
+          <button class="modal-close" id="note-close">&times;</button>
+        </div>
+        <div class="modal-body">
+          <div class="modal-tabs">
+            <button class="modal-tab active" data-modal-tab="note">📝 思路笔记</button>
+            <button class="modal-tab" data-modal-tab="code">💻 代码记录</button>
+          </div>
+          <div class="modal-tab-panel active" id="panel-note">
+            <textarea id="note-textarea" class="note-textarea" placeholder="记录核心思路、关键点、易错点..." spellcheck="false"></textarea>
+          </div>
+          <div class="modal-tab-panel" id="panel-code">
+            <textarea id="code-textarea" class="code-textarea" placeholder="粘贴你的解题代码，方便复习时快速回忆..." spellcheck="false"></textarea>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-ghost" id="note-cancel">取消</button>
+          <button class="btn btn-primary" id="note-save">保存</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Toast Container -->
+    <div class="toast-container" id="toast-container"></div>
+
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
