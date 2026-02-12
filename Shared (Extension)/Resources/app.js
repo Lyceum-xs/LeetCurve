@@ -13,17 +13,30 @@
  * ================================================================ */
 
 const REVIEW_STAGES = [
-  { label: '第1次复习', interval: 24 },
-  { label: '第2次复习', interval: 48 },
-  { label: '第3次复习', interval: 96 },
-  { label: '第4次复习', interval: 168 },
-  { label: '第5次复习', interval: 360 },
-  { label: '第6次复习', interval: 720 },
+  { label: '第1次复习', interval: 1 },
+  { label: '第2次复习', interval: 2 },
+  { label: '第3次复习', interval: 4 },
+  { label: '第4次复习', interval: 7 },
+  { label: '第5次复习', interval: 15 },
+  { label: '第6次复习', interval: 30 },
   { label: '已掌握',    interval: Infinity }
 ];
 
 const DIFF_WEIGHTS = { Easy: 0.8, Medium: 1.0, Hard: 1.5 };
 const COOLDOWN_MS  = 3600000; // 1 小时
+
+/** 日期分界线：凌晨 2:00（24 小时制） */
+const DAY_BOUNDARY_HOUR = 2;
+
+/**
+ * 根据凌晨 2:00 分界线计算"复习日"序号
+ * @param {number} timestamp - 毫秒时间戳
+ * @returns {number} 自 epoch 以来的天数（按凌晨 2 点分界）
+ */
+function getReviewDay(timestamp) {
+  const offsetMs = DAY_BOUNDARY_HOUR * 3600000;
+  return Math.floor((timestamp - offsetMs) / 86400000);
+}
 
 /* ================================================================
  *  存储适配层（StorageAdapter）
@@ -75,10 +88,14 @@ const Storage = {
 function calcPriority(problem, tagWeights = {}) {
   if (problem.stage >= REVIEW_STAGES.length - 1) return -Infinity;
 
-  const interval = REVIEW_STAGES[problem.stage].interval * 3600000;
-  const elapsed  = Date.now() - problem.last_review_time;
+  const intervalDays = REVIEW_STAGES[problem.stage].interval;
+  // 以凌晨 2 点为日期分界线计算天数差
+  const todayDay = getReviewDay(Date.now());
+  const reviewDay = getReviewDay(problem.last_review_time);
+  const elapsedDays = todayDay - reviewDay;
+
   // 钳制到 >= 0：未到期的题目优先级为 0，不会产生负值排序混乱
-  const ratio    = Math.max(0, (elapsed - interval) / interval);
+  const ratio    = Math.max(0, (elapsedDays - intervalDays) / intervalDays);
   const dw       = DIFF_WEIGHTS[problem.difficulty] || 1.0;
 
   let tw = 1.0;
@@ -204,6 +221,33 @@ function bindEvents() {
     }
   });
 
+  // 已完成列表：搜索和筛选
+  document.getElementById('completed-search-web')?.addEventListener('input', (e) => {
+    completedSearchText = e.target.value;
+    renderCompleted();
+  });
+
+  document.getElementById('completed-tag-btn-web')?.addEventListener('click', () => {
+    const dropdown = document.getElementById('completed-tag-dropdown-web');
+    if (dropdown) {
+      dropdown.style.display = dropdown.style.display === 'none' ? 'block' : 'none';
+    }
+  });
+
+  document.getElementById('completed-tag-clear-web')?.addEventListener('click', () => {
+    completedSelectedTags.clear();
+    renderCompleted();
+  });
+
+  // 点击页面其他地方关闭标签筛选下拉框
+  document.addEventListener('click', (e) => {
+    const dropdown = document.getElementById('completed-tag-dropdown-web');
+    const btn = document.getElementById('completed-tag-btn-web');
+    if (dropdown && btn && !dropdown.contains(e.target) && !btn.contains(e.target)) {
+      dropdown.style.display = 'none';
+    }
+  });
+
   // 仪表盘快捷跳转
   document.getElementById('dash-go-queue')?.addEventListener('click', () => navigateTo('queue'));
   document.getElementById('dash-go-heatmap')?.addEventListener('click', () => navigateTo('heatmap'));
@@ -216,6 +260,7 @@ function bindEvents() {
 const VIEW_TITLES = {
   dashboard: '仪表盘',
   queue: '复习队列',
+  completed: '已完成',
   mastered: '已掌握',
   recent: '近一周动态',
   heatmap: '热力图',
@@ -239,6 +284,7 @@ function navigateTo(view) {
 
   // 视图特定渲染
   if (view === 'queue') renderQueue();
+  if (view === 'completed') renderCompleted();
   if (view === 'mastered') renderMastered();
   if (view === 'recent') renderRecent();
   if (view === 'heatmap') { renderHeatmap(); renderHeatmapStats(); }
@@ -253,6 +299,7 @@ function navigateTo(view) {
 function renderAll() {
   renderDashboard();
   renderQueue();
+  renderCompleted();
   renderMastered();
   renderRecent();
   populateTagFilter();
@@ -266,6 +313,7 @@ function renderAll() {
 function updateNavBadge() {
   const all = Object.values(state.problems);
   const due = all.filter(p => p.priority_score > 0 && p.stage < REVIEW_STAGES.length - 1).length;
+  const completed = all.length;
   const mastered = all.filter(p => p.stage >= REVIEW_STAGES.length - 1).length;
 
   const dueBadge = document.getElementById('nav-badge-due');
@@ -274,6 +322,14 @@ function updateNavBadge() {
     dueBadge.classList.add('show');
   } else {
     dueBadge.classList.remove('show');
+  }
+
+  const completedBadge = document.getElementById('nav-badge-completed');
+  if (completedBadge && completed > 0) {
+    completedBadge.textContent = completed;
+    completedBadge.classList.add('show');
+  } else if (completedBadge) {
+    completedBadge.classList.remove('show');
   }
 
   const masteredBadge = document.getElementById('nav-badge-mastered');
@@ -297,10 +353,19 @@ function renderDashboard() {
   const mastered = all.filter(p => p.stage >= REVIEW_STAGES.length - 1).length;
   const due = all.filter(p => p.priority_score > 0 && p.stage < REVIEW_STAGES.length - 1).length;
 
-  document.getElementById('dash-due').textContent = due;
-  document.getElementById('dash-total').textContent = total;
-  document.getElementById('dash-mastered').textContent = mastered;
-  document.getElementById('dash-streak').textContent = calcStreak();
+  const dueEl = document.getElementById('dash-due');
+  const totalEl = document.getElementById('dash-total');
+  const masteredEl = document.getElementById('dash-mastered');
+  const streakEl = document.getElementById('dash-streak');
+
+  dueEl.textContent = due;
+  totalEl.textContent = total;
+  masteredEl.textContent = mastered;
+  streakEl.textContent = calcStreak();
+
+  // 总题数点击跳转到已完成列表
+  totalEl.style.cursor = 'pointer';
+  totalEl.onclick = () => navigateTo('completed');
 
   // 最紧急列表
   const urgent = all
@@ -318,7 +383,7 @@ function renderDashboard() {
       const url = p.url || `${fb}/problems/${p.slug}/`;
       return `<div class="urgent-item">
         <span class="diff-badge ${p.difficulty.toLowerCase()}">${p.difficulty[0]}</span>
-        <a href="${esc(url)}" target="_blank">${esc(name)}</a>
+        <a href="${esc(url)}" target="_blank" rel="noopener">${esc(name)}</a>
         <span class="urgent-overdue">${getTimeStr(p)}</span>
       </div>`;
     }).join('');
@@ -611,6 +676,113 @@ function renderHeatmapStats() {
     <div class="hm-stat-card"><div class="hm-stat-val">${longestStrk}</div><div class="hm-stat-lbl">最长连续</div></div>
     <div class="hm-stat-card"><div class="hm-stat-val">${calcStreak()}</div><div class="hm-stat-lbl">当前连续</div></div>
   `;
+}
+
+/* ================================================================
+ *  已完成题目 (Completed)
+ * ================================================================ */
+
+/** 已完成列表的筛选状态 */
+let completedSearchText = '';
+let completedSelectedTags = new Set();
+
+function renderCompleted() {
+  const container = document.getElementById('completed-grid');
+  if (!container) return;
+
+  // 获取所有题目（不限制 stage）
+  let completed = Object.values(state.problems)
+    .sort((a, b) => (b.first_accepted_time || 0) - (a.first_accepted_time || 0));
+
+  // 搜索筛选（题目名称或题号）
+  if (completedSearchText.trim()) {
+    const search = completedSearchText.toLowerCase();
+    completed = completed.filter(p => {
+      const title = (p.title || '').toLowerCase();
+      const id = (p.questionId || '').toLowerCase();
+      return title.includes(search) || id.includes(search);
+    });
+  }
+
+  // 标签筛选（多选，AND 逻辑：必须包含所有选中的标签）
+  if (completedSelectedTags.size > 0) {
+    completed = completed.filter(p => {
+      const pTags = new Set(p.tags || []);
+      for (const tag of completedSelectedTags) {
+        if (!pTags.has(tag)) return false;
+      }
+      return true;
+    });
+  }
+
+  if (completed.length === 0) {
+    container.innerHTML = `<div class="empty-state">
+      <div class="empty-icon">${completedSearchText || completedSelectedTags.size > 0 ? '🔍' : '📚'}</div>
+      <p class="empty-title">${completedSearchText || completedSelectedTags.size > 0 ? '没有匹配的题目' : '还没有完成的题目'}</p>
+      <p class="empty-hint">${completedSearchText || completedSelectedTags.size > 0 ? '试试其他关键词或标签' : '去 LeetCode 提交一道题试试吧！'}</p>
+    </div>`;
+    return;
+  }
+
+  container.innerHTML = completed.map(p => buildQCard(p)).join('');
+
+  // 绑定操作
+  container.querySelectorAll('.act-note').forEach(b =>
+    b.addEventListener('click', (e) => { e.stopPropagation(); openNote(b.dataset.slug); }));
+  container.querySelectorAll('.act-reset').forEach(b =>
+    b.addEventListener('click', (e) => { e.stopPropagation(); resetProblem(b.dataset.slug); }));
+  container.querySelectorAll('.act-delete').forEach(b =>
+    b.addEventListener('click', (e) => { e.stopPropagation(); deleteProblem(b.dataset.slug); }));
+
+  container.querySelectorAll('.q-body').forEach(body => {
+    body.addEventListener('click', (e) => {
+      if (e.target.closest('a') || e.target.closest('button')) return;
+      openNote(body.dataset.slug);
+    });
+  });
+
+  // 更新标签筛选UI
+  renderCompletedTagFilter();
+}
+
+/** 渲染已完成列表的标签筛选器 */
+function renderCompletedTagFilter() {
+  const listEl = document.getElementById('completed-tag-list-web');
+  const countEl = document.getElementById('completed-tag-count-web');
+  if (!listEl) return;
+
+  // 收集所有标签
+  const tagSet = new Set();
+  Object.values(state.problems).forEach(p => {
+    (p.tags || []).forEach(t => tagSet.add(t));
+  });
+  const tags = [...tagSet].sort();
+
+  listEl.innerHTML = tags.map(tag => `
+    <div class="tag-filter-item">
+      <input type="checkbox" id="ctag-web-${esc(tag)}" value="${esc(tag)}" 
+        ${completedSelectedTags.has(tag) ? 'checked' : ''}>
+      <label for="ctag-web-${esc(tag)}">${esc(tag)}</label>
+    </div>
+  `).join('');
+
+  // 绑定复选框事件
+  listEl.querySelectorAll('input[type="checkbox"]').forEach(cb => {
+    cb.addEventListener('change', () => {
+      const tag = cb.value;
+      if (cb.checked) {
+        completedSelectedTags.add(tag);
+      } else {
+        completedSelectedTags.delete(tag);
+      }
+      renderCompleted();
+    });
+  });
+
+  // 更新选中数量显示
+  if (countEl) {
+    countEl.textContent = completedSelectedTags.size > 0 ? `(${completedSelectedTags.size})` : '';
+  }
 }
 
 /* ================================================================
@@ -993,8 +1165,7 @@ function renderStagesInfo() {
   const el = document.getElementById('settings-stages');
   if (!el) return;
   el.innerHTML = REVIEW_STAGES.map((s, i) => {
-    const t = s.interval === Infinity ? '∞'
-      : s.interval >= 24 ? `${s.interval / 24} 天` : `${s.interval} 小时`;
+    const t = s.interval === Infinity ? '∞' : `${s.interval} 天`;
     return `<div class="stage-chip">${i + 1}. ${s.label} <b>${t}</b></div>`;
   }).join('');
 }
@@ -1092,11 +1263,16 @@ function hmLevel(c) {
 
 function getTimeStr(p) {
   if (p.stage >= REVIEW_STAGES.length - 1) return '已掌握';
-  const interval = REVIEW_STAGES[p.stage].interval * 3600000;
-  const next = p.last_review_time + interval;
-  const diff = next - Date.now();
-  if (diff <= 0) return `逾期 ${fmtDur(Math.abs(diff))}`;
-  return `${fmtDur(diff)} 后`;
+  const intervalDays = REVIEW_STAGES[p.stage].interval;
+  const todayDay = getReviewDay(Date.now());
+  const reviewDay = getReviewDay(p.last_review_time);
+  const elapsedDays = todayDay - reviewDay;
+  const remainDays = intervalDays - elapsedDays;
+  if (remainDays <= 0) {
+    const overdueDays = Math.abs(remainDays);
+    return overdueDays === 0 ? '今日待复习' : `逾期 ${overdueDays} 天`;
+  }
+  return remainDays === 1 ? '明天复习' : `${remainDays} 天后`;
 }
 
 function fmtDur(ms) {

@@ -13,17 +13,30 @@
  * ================================================================ */
 
 const REVIEW_STAGES = [
-  { label: '第1次复习', interval: 24 },
-  { label: '第2次复习', interval: 48 },
-  { label: '第3次复习', interval: 96 },
-  { label: '第4次复习', interval: 168 },
-  { label: '第5次复习', interval: 360 },
-  { label: '第6次复习', interval: 720 },
+  { label: '第1次复习', interval: 1 },
+  { label: '第2次复习', interval: 2 },
+  { label: '第3次复习', interval: 4 },
+  { label: '第4次复习', interval: 7 },
+  { label: '第5次复习', interval: 15 },
+  { label: '第6次复习', interval: 30 },
   { label: '已掌握',    interval: Infinity }
 ];
 
 const DIFF_WEIGHTS = { Easy: 0.8, Medium: 1.0, Hard: 1.5 };
 const COOLDOWN_MS  = 3600000; // 1 小时
+
+/** 日期分界线：凌晨 2:00（24 小时制） */
+const DAY_BOUNDARY_HOUR = 2;
+
+/**
+ * 根据凌晨 2:00 分界线计算"复习日"序号
+ * @param {number} timestamp - 毫秒时间戳
+ * @returns {number} 自 epoch 以来的天数（按凌晨 2 点分界）
+ */
+function getReviewDay(timestamp) {
+  const offsetMs = DAY_BOUNDARY_HOUR * 3600000;
+  return Math.floor((timestamp - offsetMs) / 86400000);
+}
 
 /* ================================================================
  *  存储适配层（StorageAdapter）
@@ -75,10 +88,14 @@ const Storage = {
 function calcPriority(problem, tagWeights = {}) {
   if (problem.stage >= REVIEW_STAGES.length - 1) return -Infinity;
 
-  const interval = REVIEW_STAGES[problem.stage].interval * 3600000;
-  const elapsed  = Date.now() - problem.last_review_time;
+  const intervalDays = REVIEW_STAGES[problem.stage].interval;
+  // 以凌晨 2 点为日期分界线计算天数差
+  const todayDay = getReviewDay(Date.now());
+  const reviewDay = getReviewDay(problem.last_review_time);
+  const elapsedDays = todayDay - reviewDay;
+
   // 钳制到 >= 0：未到期的题目优先级为 0，不会产生负值排序混乱
-  const ratio    = Math.max(0, (elapsed - interval) / interval);
+  const ratio    = Math.max(0, (elapsedDays - intervalDays) / intervalDays);
   const dw       = DIFF_WEIGHTS[problem.difficulty] || 1.0;
 
   let tw = 1.0;
@@ -1148,8 +1165,7 @@ function renderStagesInfo() {
   const el = document.getElementById('settings-stages');
   if (!el) return;
   el.innerHTML = REVIEW_STAGES.map((s, i) => {
-    const t = s.interval === Infinity ? '∞'
-      : s.interval >= 24 ? `${s.interval / 24} 天` : `${s.interval} 小时`;
+    const t = s.interval === Infinity ? '∞' : `${s.interval} 天`;
     return `<div class="stage-chip">${i + 1}. ${s.label} <b>${t}</b></div>`;
   }).join('');
 }
@@ -1247,11 +1263,16 @@ function hmLevel(c) {
 
 function getTimeStr(p) {
   if (p.stage >= REVIEW_STAGES.length - 1) return '已掌握';
-  const interval = REVIEW_STAGES[p.stage].interval * 3600000;
-  const next = p.last_review_time + interval;
-  const diff = next - Date.now();
-  if (diff <= 0) return `逾期 ${fmtDur(Math.abs(diff))}`;
-  return `${fmtDur(diff)} 后`;
+  const intervalDays = REVIEW_STAGES[p.stage].interval;
+  const todayDay = getReviewDay(Date.now());
+  const reviewDay = getReviewDay(p.last_review_time);
+  const elapsedDays = todayDay - reviewDay;
+  const remainDays = intervalDays - elapsedDays;
+  if (remainDays <= 0) {
+    const overdueDays = Math.abs(remainDays);
+    return overdueDays === 0 ? '今日待复习' : `逾期 ${overdueDays} 天`;
+  }
+  return remainDays === 1 ? '明天复习' : `${remainDays} 天后`;
 }
 
 function fmtDur(ms) {

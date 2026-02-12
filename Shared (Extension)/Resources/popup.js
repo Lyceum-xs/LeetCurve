@@ -54,6 +54,7 @@ async function loadAllData() {
 function renderAll() {
   renderStats();
   renderQueue();
+  renderCompletedList();
   populateTagFilter();
   renderMasteredList();
   renderRecentActivity();
@@ -148,6 +149,33 @@ function setupEventListeners() {
     document.getElementById('import-file').click();
   });
   document.getElementById('import-file').addEventListener('change', importData);
+
+  // 已完成列表：搜索和筛选
+  document.getElementById('completed-search')?.addEventListener('input', (e) => {
+    completedSearchText = e.target.value;
+    renderCompletedList();
+  });
+
+  document.getElementById('completed-tag-filter-btn')?.addEventListener('click', () => {
+    const dropdown = document.getElementById('completed-tag-dropdown');
+    if (dropdown) {
+      dropdown.style.display = dropdown.style.display === 'none' ? 'block' : 'none';
+    }
+  });
+
+  document.getElementById('completed-tag-clear')?.addEventListener('click', () => {
+    completedSelectedTags.clear();
+    renderCompletedList();
+  });
+
+  // 点击页面其他地方关闭标签筛选下拉框
+  document.addEventListener('click', (e) => {
+    const dropdown = document.getElementById('completed-tag-dropdown');
+    const btn = document.getElementById('completed-tag-filter-btn');
+    if (dropdown && btn && !dropdown.contains(e.target) && !btn.contains(e.target)) {
+      dropdown.style.display = 'none';
+    }
+  });
 }
 
 /* ================================================================
@@ -165,6 +193,8 @@ function switchTab(tabName) {
   if (tabName === 'heatmap') {
     renderHeatmap();
     renderHeatmapStats();
+  } else if (tabName === 'completed') {
+    renderCompletedList();
   } else if (tabName === 'mastered') {
     renderMasteredList();
   } else if (tabName === 'recent') {
@@ -185,10 +215,19 @@ function renderStats() {
   ).length;
   const streak = calculateStreak();
 
-  document.getElementById('stat-total').textContent = total;
-  document.getElementById('stat-mastered').textContent = mastered;
-  document.getElementById('stat-due').textContent = due;
-  document.getElementById('stat-streak').textContent = streak;
+  const totalEl = document.getElementById('stat-total');
+  const masteredEl = document.getElementById('stat-mastered');
+  const dueEl = document.getElementById('stat-due');
+  const streakEl = document.getElementById('stat-streak');
+
+  totalEl.textContent = total;
+  masteredEl.textContent = mastered;
+  dueEl.textContent = due;
+  streakEl.textContent = streak;
+
+  // 总题数点击跳转到已完成列表
+  totalEl.style.cursor = 'pointer';
+  totalEl.onclick = () => switchTab('completed');
 }
 
 /** 计算连续活跃天数 */
@@ -395,24 +434,37 @@ function renderProblemCard(problem) {
   `;
 }
 
+/** 日期分界线：凌晨 2:00（24 小时制） */
+const DAY_BOUNDARY_HOUR = 2;
+
+/**
+ * 根据凌晨 2:00 分界线计算"复习日"序号
+ * @param {number} timestamp - 毫秒时间戳
+ * @returns {number} 自 epoch 以来的天数（按凌晨 2 点分界）
+ */
+function getReviewDay(timestamp) {
+  const offsetMs = DAY_BOUNDARY_HOUR * 3600000;
+  return Math.floor((timestamp - offsetMs) / 86400000);
+}
+
 /**
  * 计算距离下次复习的时间描述
+ * 以凌晨 2:00 为日期分界线
  */
 function getTimeInfo(problem) {
   if (problem.stage >= stagesInfo.length - 1) return '已掌握';
 
-  const now = Date.now();
-  const interval = stagesInfo[problem.stage].interval * 3600000;
-  const nextReview = problem.last_review_time + interval;
-  const diff = nextReview - now;
+  const intervalDays = stagesInfo[problem.stage].interval;
+  const todayDay = getReviewDay(Date.now());
+  const reviewDay = getReviewDay(problem.last_review_time);
+  const elapsedDays = todayDay - reviewDay;
+  const remainDays = intervalDays - elapsedDays;
 
-  if (diff <= 0) {
-    // 逾期
-    const overdue = Math.abs(diff);
-    return `逾期 ${formatDuration(overdue)}`;
-  } else {
-    return `${formatDuration(diff)} 后复习`;
+  if (remainDays <= 0) {
+    const overdueDays = Math.abs(remainDays);
+    return overdueDays === 0 ? '今日待复习' : `逾期 ${overdueDays} 天`;
   }
+  return remainDays === 1 ? '明天复习' : `${remainDays} 天后复习`;
 }
 
 /** 格式化时间间隔 */
@@ -561,6 +613,129 @@ async function deleteProblem(slug) {
   if (resp.success) {
     delete allProblems[slug];
     renderAll();
+  }
+}
+
+/* ================================================================
+ *  已完成题目列表 (Completed List)
+ * ================================================================ */
+
+/** 已完成列表的筛选状态 */
+let completedSearchText = '';
+let completedSelectedTags = new Set();
+
+function renderCompletedList() {
+  const container = document.getElementById('completed-list');
+  if (!container) return;
+
+  // 获取所有题目（不限制 stage）
+  let completed = Object.values(allProblems)
+    .sort((a, b) => (b.first_accepted_time || 0) - (a.first_accepted_time || 0));
+
+  // 搜索筛选（题目名称或题号）
+  if (completedSearchText.trim()) {
+    const search = completedSearchText.toLowerCase();
+    completed = completed.filter(p => {
+      const title = (p.title || '').toLowerCase();
+      const id = (p.questionId || '').toLowerCase();
+      return title.includes(search) || id.includes(search);
+    });
+  }
+
+  // 标签筛选（多选，AND 逻辑：必须包含所有选中的标签）
+  if (completedSelectedTags.size > 0) {
+    completed = completed.filter(p => {
+      const pTags = new Set(p.tags || []);
+      for (const tag of completedSelectedTags) {
+        if (!pTags.has(tag)) return false;
+      }
+      return true;
+    });
+  }
+
+  if (completed.length === 0) {
+    container.innerHTML = `
+      <div class="empty-state">
+        <div class="empty-icon">${completedSearchText || completedSelectedTags.size > 0 ? '🔍' : '📚'}</div>
+        <p class="empty-title">${completedSearchText || completedSelectedTags.size > 0 ? '没有匹配的题目' : '还没有完成的题目'}</p>
+        <p class="empty-hint">${completedSearchText || completedSelectedTags.size > 0 ? '试试其他关键词或标签' : '去 LeetCode 提交一道题试试吧！'}</p>
+      </div>
+    `;
+    return;
+  }
+
+  container.innerHTML = completed.map(p => renderProblemCard(p)).join('');
+
+  // 绑定卡片交互
+  container.querySelectorAll('.action-btn-note').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      openNoteModal(btn.dataset.slug);
+    });
+  });
+
+  container.querySelectorAll('.action-btn-reset').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      resetProblem(btn.dataset.slug);
+    });
+  });
+
+  container.querySelectorAll('.action-btn-delete').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      deleteProblem(btn.dataset.slug);
+    });
+  });
+
+  container.querySelectorAll('.card-body').forEach(body => {
+    body.addEventListener('click', (e) => {
+      if (e.target.closest('a') || e.target.closest('button')) return;
+      openNoteModal(body.dataset.slug);
+    });
+  });
+
+  // 更新标签筛选UI
+  renderCompletedTagFilter();
+}
+
+/** 渲染已完成列表的标签筛选器 */
+function renderCompletedTagFilter() {
+  const listEl = document.getElementById('completed-tag-list');
+  const countEl = document.getElementById('completed-tag-count');
+  if (!listEl) return;
+
+  // 收集所有标签
+  const tagSet = new Set();
+  Object.values(allProblems).forEach(p => {
+    (p.tags || []).forEach(t => tagSet.add(t));
+  });
+  const tags = [...tagSet].sort();
+
+  listEl.innerHTML = tags.map(tag => `
+    <div class="tag-filter-item">
+      <input type="checkbox" id="ctag-${escapeHtml(tag)}" value="${escapeHtml(tag)}" 
+        ${completedSelectedTags.has(tag) ? 'checked' : ''}>
+      <label for="ctag-${escapeHtml(tag)}">${escapeHtml(tag)}</label>
+    </div>
+  `).join('');
+
+  // 绑定复选框事件
+  listEl.querySelectorAll('input[type="checkbox"]').forEach(cb => {
+    cb.addEventListener('change', () => {
+      const tag = cb.value;
+      if (cb.checked) {
+        completedSelectedTags.add(tag);
+      } else {
+        completedSelectedTags.delete(tag);
+      }
+      renderCompletedList();
+    });
+  });
+
+  // 更新选中数量显示
+  if (countEl) {
+    countEl.textContent = completedSelectedTags.size > 0 ? `(${completedSelectedTags.size})` : '';
   }
 }
 
@@ -935,9 +1110,7 @@ function renderStagesInfo() {
   container.innerHTML = stagesInfo.map((stage, i) => {
     const intervalText = stage.interval === Infinity
       ? '∞'
-      : stage.interval >= 24
-        ? `${stage.interval / 24} 天`
-        : `${stage.interval} 小时`;
+      : `${stage.interval} 天`;
 
     return `
       <div class="stage-chip">

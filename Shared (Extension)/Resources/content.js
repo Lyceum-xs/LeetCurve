@@ -214,5 +214,41 @@
     }, 3500);
   }
 
+  /* ================================================================
+   *  数据备份 / 恢复（防 Safari 重装清除 chrome.storage）
+   *  利用 LeetCode 域名下的 localStorage 作为持久化备份
+   * ================================================================ */
+
+  const BACKUP_KEY = '__leetcurve_backup__';
+
+  chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+    if (message.type === 'BACKUP_DATA') {
+      try {
+        localStorage.setItem(BACKUP_KEY, JSON.stringify(message.data));
+        sendResponse({ success: true });
+      } catch (e) {
+        console.warn('[LeetCurve] 备份到 localStorage 失败:', e);
+        sendResponse({ success: false, message: e.message });
+      }
+      return true;
+    }
+
+    if (message.type === 'RESTORE_DATA') {
+      try {
+        const raw = localStorage.getItem(BACKUP_KEY);
+        if (raw) {
+          const data = JSON.parse(raw);
+          sendResponse({ success: true, data });
+        } else {
+          sendResponse({ success: false, message: '无备份数据' });
+        }
+      } catch (e) {
+        console.warn('[LeetCurve] 从 localStorage 恢复失败:', e);
+        sendResponse({ success: false, message: e.message });
+      }
+      return true;
+    }
+  });
+
   console.log('[LeetCurve] Content script loaded on:', window.location.href);
 })();

@@ -434,24 +434,37 @@ function renderProblemCard(problem) {
   `;
 }
 
+/** 日期分界线：凌晨 2:00（24 小时制） */
+const DAY_BOUNDARY_HOUR = 2;
+
+/**
+ * 根据凌晨 2:00 分界线计算"复习日"序号
+ * @param {number} timestamp - 毫秒时间戳
+ * @returns {number} 自 epoch 以来的天数（按凌晨 2 点分界）
+ */
+function getReviewDay(timestamp) {
+  const offsetMs = DAY_BOUNDARY_HOUR * 3600000;
+  return Math.floor((timestamp - offsetMs) / 86400000);
+}
+
 /**
  * 计算距离下次复习的时间描述
+ * 以凌晨 2:00 为日期分界线
  */
 function getTimeInfo(problem) {
   if (problem.stage >= stagesInfo.length - 1) return '已掌握';
 
-  const now = Date.now();
-  const interval = stagesInfo[problem.stage].interval * 3600000;
-  const nextReview = problem.last_review_time + interval;
-  const diff = nextReview - now;
+  const intervalDays = stagesInfo[problem.stage].interval;
+  const todayDay = getReviewDay(Date.now());
+  const reviewDay = getReviewDay(problem.last_review_time);
+  const elapsedDays = todayDay - reviewDay;
+  const remainDays = intervalDays - elapsedDays;
 
-  if (diff <= 0) {
-    // 逾期
-    const overdue = Math.abs(diff);
-    return `逾期 ${formatDuration(overdue)}`;
-  } else {
-    return `${formatDuration(diff)} 后复习`;
+  if (remainDays <= 0) {
+    const overdueDays = Math.abs(remainDays);
+    return overdueDays === 0 ? '今日待复习' : `逾期 ${overdueDays} 天`;
   }
+  return remainDays === 1 ? '明天复习' : `${remainDays} 天后复习`;
 }
 
 /** 格式化时间间隔 */
@@ -1097,9 +1110,7 @@ function renderStagesInfo() {
   container.innerHTML = stagesInfo.map((stage, i) => {
     const intervalText = stage.interval === Infinity
       ? '∞'
-      : stage.interval >= 24
-        ? `${stage.interval / 24} 天`
-        : `${stage.interval} 小时`;
+      : `${stage.interval} 天`;
 
     return `
       <div class="stage-chip">

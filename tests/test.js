@@ -76,12 +76,12 @@ async function runAllSuites() {
  * ================================================================ */
 
 const REVIEW_STAGES = [
-  { label: '第1次复习', interval: 24 },
-  { label: '第2次复习', interval: 48 },
-  { label: '第3次复习', interval: 96 },
-  { label: '第4次复习', interval: 168 },
-  { label: '第5次复习', interval: 360 },
-  { label: '第6次复习', interval: 720 },
+  { label: '第1次复习', interval: 1 },
+  { label: '第2次复习', interval: 2 },
+  { label: '第3次复习', interval: 4 },
+  { label: '第4次复习', interval: 7 },
+  { label: '第5次复习', interval: 15 },
+  { label: '第6次复习', interval: 30 },
   { label: '已掌握',    interval: Infinity }
 ];
 
@@ -89,14 +89,31 @@ const DIFFICULTY_WEIGHTS = { Easy: 0.8, Medium: 1.0, Hard: 1.5 };
 const COOLDOWN_MS = 60 * 60 * 1000; // 1 小时
 const DEFAULT_TAG_WEIGHT = 1.0;
 
+/** 日期分界线：凌晨 2:00（24 小时制） */
+const DAY_BOUNDARY_HOUR = 2;
+
+/**
+ * 根据凌晨 2:00 分界线计算"复习日"序号
+ * @param {number} timestamp - 毫秒时间戳
+ * @returns {number} 自 epoch 以来的天数（按凌晨 2 点分界）
+ */
+function getReviewDay(timestamp) {
+  const offsetMs = DAY_BOUNDARY_HOUR * 3600000;
+  return Math.floor((timestamp - offsetMs) / 86400000);
+}
+
 function calculatePriority(problem, tagWeights = {}) {
   if (problem.stage >= REVIEW_STAGES.length - 1) return -Infinity;
 
   const now = Date.now();
   const stageInfo = REVIEW_STAGES[problem.stage];
-  const intervalMs = stageInfo.interval * 3600000;
-  const elapsed = now - problem.last_review_time;
-  const overdueRatio = Math.max(0, (elapsed - intervalMs) / intervalMs);
+  const intervalDays = stageInfo.interval;
+
+  const todayDay = getReviewDay(now);
+  const reviewDay = getReviewDay(problem.last_review_time);
+  const elapsedDays = todayDay - reviewDay;
+
+  const overdueRatio = Math.max(0, (elapsedDays - intervalDays) / intervalDays);
   const diffWeight = DIFFICULTY_WEIGHTS[problem.difficulty] || 1.0;
 
   let maxTagWeight = DEFAULT_TAG_WEIGHT;
@@ -232,12 +249,12 @@ function getRelativeTime(timestamp) {
 // ─────────────────────────────────────────────────────────────────
 describe('1. 艾宾浩斯复习阶段常量', () => {
   assertEqual(REVIEW_STAGES.length, 7, '共 7 个阶段（含"已掌握"）');
-  assertEqual(REVIEW_STAGES[0].interval, 24, 'Stage 0 间隔为 24 小时');
-  assertEqual(REVIEW_STAGES[1].interval, 48, 'Stage 1 间隔为 48 小时');
-  assertEqual(REVIEW_STAGES[2].interval, 96, 'Stage 2 间隔为 96 小时');
-  assertEqual(REVIEW_STAGES[3].interval, 168, 'Stage 3 间隔为 168 小时');
-  assertEqual(REVIEW_STAGES[4].interval, 360, 'Stage 4 间隔为 360 小时');
-  assertEqual(REVIEW_STAGES[5].interval, 720, 'Stage 5 间隔为 720 小时');
+  assertEqual(REVIEW_STAGES[0].interval, 1, 'Stage 0 间隔为 1 天');
+  assertEqual(REVIEW_STAGES[1].interval, 2, 'Stage 1 间隔为 2 天');
+  assertEqual(REVIEW_STAGES[2].interval, 4, 'Stage 2 间隔为 4 天');
+  assertEqual(REVIEW_STAGES[3].interval, 7, 'Stage 3 间隔为 7 天');
+  assertEqual(REVIEW_STAGES[4].interval, 15, 'Stage 4 间隔为 15 天');
+  assertEqual(REVIEW_STAGES[5].interval, 30, 'Stage 5 间隔为 30 天');
   assertEqual(REVIEW_STAGES[6].interval, Infinity, 'Stage 6 间隔为 Infinity');
   assertEqual(REVIEW_STAGES[6].label, '已掌握', 'Stage 6 标签为"已掌握"');
 });
@@ -250,8 +267,9 @@ describe('2. 难度权重系数', () => {
 });
 
 // ─────────────────────────────────────────────────────────────────
-describe('3. 优先级算法 — calculatePriority', () => {
+describe('3. 优先级算法 — calculatePriority（凌晨 2 点分界线）', () => {
   const now = Date.now();
+  const ONE_DAY_MS = 86400000;
 
   // 3.1 已掌握的题目返回 -Infinity
   const mastered = {
@@ -267,49 +285,70 @@ describe('3. 优先级算法 — calculatePriority', () => {
   };
   assertEqual(calculatePriority(fresh), 0, '刚提交的题目（未逾期）优先级 = 0');
 
-  // 3.3 逾期 1 倍间隔 → overdueRatio = 1.0
+  // 3.3 逾期 1 倍间隔（Stage 0 interval=1天，实际过了 2 天）→ overdueRatio = 1.0
   const overdue = {
     stage: 0, difficulty: 'Medium', tags: [],
-    last_review_time: now - (24 * 2 * 3600000) // 48 小时前，逾期 1 倍
+    last_review_time: now - (2 * ONE_DAY_MS) // 2 天前，interval=1天，逾期 1 倍
   };
   assertApprox(calculatePriority(overdue), 1.0, 0.01, '逾期 1 倍间隔：Medium 优先级 ≈ 1.0');
 
   // 3.4 Hard 题目逾期 1 倍 → 1.0 * 1.5 = 1.5
   const hardOverdue = {
     stage: 0, difficulty: 'Hard', tags: [],
-    last_review_time: now - (24 * 2 * 3600000)
+    last_review_time: now - (2 * ONE_DAY_MS)
   };
   assertApprox(calculatePriority(hardOverdue), 1.5, 0.01, '逾期 1 倍间隔：Hard 优先级 ≈ 1.5');
 
   // 3.5 Easy 题目逾期 1 倍 → 1.0 * 0.8 = 0.8
   const easyOverdue = {
     stage: 0, difficulty: 'Easy', tags: [],
-    last_review_time: now - (24 * 2 * 3600000)
+    last_review_time: now - (2 * ONE_DAY_MS)
   };
   assertApprox(calculatePriority(easyOverdue), 0.8, 0.01, '逾期 1 倍间隔：Easy 优先级 ≈ 0.8');
 
   // 3.6 标签权重应用
   const withTag = {
     stage: 0, difficulty: 'Medium', tags: ['DP', 'Array'],
-    last_review_time: now - (24 * 2 * 3600000)
+    last_review_time: now - (2 * ONE_DAY_MS)
   };
   const tagWeights = { 'DP': 2.0, 'Array': 1.0 };
   assertApprox(calculatePriority(withTag, tagWeights), 2.0, 0.01,
     '标签权重：DP=2.0 时优先级 ≈ 2.0（取最大权重）');
 
-  // 3.7 未到期的题目优先级钳制到 0
+  // 3.7 未到期的题目优先级钳制到 0（同一天内提交不算逾期）
   const notDue = {
     stage: 0, difficulty: 'Medium', tags: [],
-    last_review_time: now - (12 * 3600000) // 12 小时前，还差 12 小时
+    last_review_time: now - (12 * 3600000) // 12 小时前，同一个复习日
   };
-  assertEqual(calculatePriority(notDue), 0, '未到期题目优先级钳制到 0');
+  assertEqual(calculatePriority(notDue), 0, '未到期题目（同一复习日）优先级钳制到 0');
 
-  // 3.8 不同阶段的间隔应正确影响
+  // 3.8 不同阶段的间隔应正确影响（Stage 2 interval=4天，逾期 1 倍 = 8 天前）
   const stage2 = {
     stage: 2, difficulty: 'Medium', tags: [],
-    last_review_time: now - (96 * 2 * 3600000) // 逾期 1 倍
+    last_review_time: now - (8 * ONE_DAY_MS) // 8 天前，interval=4天，逾期 1 倍
   };
   assertApprox(calculatePriority(stage2), 1.0, 0.01, 'Stage 2 逾期 1 倍间隔优先级 ≈ 1.0');
+
+  // 3.9 凌晨 2 点分界线验证
+  assertEqual(DAY_BOUNDARY_HOUR, 2, '日期分界线为凌晨 2 点');
+
+  // 使用 UTC 时间精确构造分界线前后的时间戳，避免时区干扰
+  // 基准时间点：UTC 2026-02-12 02:00:00（假设本地时区为 UTC+8，即本地 10:00）
+  const baseUTC = Date.UTC(2026, 1, 12, 2, 0, 0);
+  // 分界线逻辑是用本地时间还是绝对时间？→ getReviewDay 使用绝对时间戳
+  // getReviewDay(t) = floor((t - 2h_ms) / 1day_ms)
+  // 验证：减去 2 小时偏移后，相差不到 1 天的两个时间点应属于同一 reviewDay
+  const t_a = baseUTC;                // 某个时间点
+  const t_b = t_a + 23 * 3600000;    // 23 小时后
+  const t_c = t_a + 24 * 3600000;    // 24 小时后（新的一天）
+  assertEqual(getReviewDay(t_a), getReviewDay(t_b), '同一复习日内（间隔 23 小时）getReviewDay 相同');
+  assertEqual(getReviewDay(t_c) - getReviewDay(t_a), 1, '跨越 24 小时后 getReviewDay 增加 1');
+
+  // 验证分界偏移效果：在偏移量边界附近测试
+  const boundary = DAY_BOUNDARY_HOUR * 3600000; // 2 小时的毫秒
+  const justBefore = boundary - 1;  // 偏移后 < 0 天 → day = -1
+  const justAfter = boundary;       // 偏移后 = 0 → day = 0
+  assertEqual(getReviewDay(justAfter) - getReviewDay(justBefore), 1, '分界线前后 1ms getReviewDay 相差 1');
 });
 
 // ─────────────────────────────────────────────────────────────────

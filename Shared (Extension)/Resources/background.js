@@ -15,18 +15,22 @@
  * ================================================================ */
 
 /**
- * 艾宾浩斯遗忘曲线复习间隔（单位：小时）
+ * 艾宾浩斯遗忘曲线复习间隔（单位：天）
  * 阶段逐级递增，模拟科学记忆规律
+ * 每天以凌晨 2:00 为日期分界线刷新复习状态
  */
 const REVIEW_STAGES = [
-  { label: '第1次复习', interval: 24 },       // 1 天后
-  { label: '第2次复习', interval: 48 },       // 2 天后
-  { label: '第3次复习', interval: 96 },       // 4 天后
-  { label: '第4次复习', interval: 168 },      // 7 天后
-  { label: '第5次复习', interval: 360 },      // 15 天后
-  { label: '第6次复习', interval: 720 },      // 30 天后
+  { label: '第1次复习', interval: 1 },        // 1 天后
+  { label: '第2次复习', interval: 2 },        // 2 天后
+  { label: '第3次复习', interval: 4 },        // 4 天后
+  { label: '第4次复习', interval: 7 },        // 7 天后
+  { label: '第5次复习', interval: 15 },       // 15 天后
+  { label: '第6次复习', interval: 30 },       // 30 天后
   { label: '已掌握',    interval: Infinity }  // 完全掌握
 ];
+
+/** 日期分界线：凌晨 2:00（24 小时制） */
+const DAY_BOUNDARY_HOUR = 2;
 
 /** 难度权重系数 —— Hard 遗忘更快，Easy 遗忘更慢 */
 const DIFFICULTY_WEIGHTS = {
@@ -41,6 +45,19 @@ const COOLDOWN_MS = 60 * 60 * 1000;
 /** 默认标签权重 */
 const DEFAULT_TAG_WEIGHT = 1.0;
 
+/**
+ * 根据凌晨 2:00 分界线计算"复习日"序号
+ * 比如：2026-02-12 01:59 属于 2026-02-11 的复习日
+ *       2026-02-12 02:00 属于 2026-02-12 的复习日
+ * @param {number} timestamp - 毫秒时间戳
+ * @returns {number} 自 epoch 以来的天数（按凌晨 2 点分界）
+ */
+function getReviewDay(timestamp) {
+  // 减去分界线偏移量后，取整天数
+  const offsetMs = DAY_BOUNDARY_HOUR * 3600000;
+  return Math.floor((timestamp - offsetMs) / 86400000);
+}
+
 /* ================================================================
  *  存储工具层（Storage Abstraction）
  * ================================================================ */
@@ -54,6 +71,7 @@ async function getAllProblems() {
 /** 写入所有题目数据 */
 async function saveAllProblems(problems) {
   await chrome.storage.local.set({ problems });
+  scheduleBackup();
 }
 
 /** 读取单个题目 */
@@ -78,6 +96,7 @@ async function getSettings() {
 /** 写入用户设置 */
 async function saveSettings(settings) {
   await chrome.storage.local.set({ settings });
+  scheduleBackup();
 }
 
 /** 读取每日活动日志（热力图数据源） */
@@ -95,6 +114,100 @@ async function logActivity() {
 }
 
 /* ================================================================
+ *  数据备份 / 恢复（Safari 防丢失）
+ * ================================================================
+ *
+ *  Safari 会定时关闭"允许使用未签名插件"，重新安装后
+ *  chrome.storage.local 会被清空。
+ *
+ *  策略：
+ *  - 每次数据写入后，异步备份到 LeetCode 域名的 localStorage
+ *    （通过向当前打开的 LeetCode 标签页的 content script 发消息）
+ *  - 扩展安装时如果发现数据为空，尝试从 LeetCode 标签页恢复
+ */
+
+/** 备份防抖定时器 ID */
+let _backupTimer = null;
+
+/**
+ * 防抖调度备份：多次快速写入时只触发一次备份（延迟 5 秒）
+ */
+function scheduleBackup() {
+  if (_backupTimer) clearTimeout(_backupTimer);
+  _backupTimer = setTimeout(() => {
+    _backupTimer = null;
+    backupToLocalStorage();
+  }, 5000);
+}
+
+/**
+ * 向所有 LeetCode 标签页发送备份消息
+ * 静默失败：没有打开 LeetCode 标签页时不影响正常使用
+ */
+async function backupToLocalStorage() {
+  try {
+    const [problems, settings, activityLog] = await Promise.all([
+      getAllProblems(), getSettings(), getActivityLog()
+    ]);
+    // 只在有实际数据时才备份
+    if (Object.keys(problems).length === 0) return;
+
+    const payload = {
+      version: '1.0.0',
+      backupTime: Date.now(),
+      problems,
+      settings,
+      activityLog
+    };
+
+    const tabs = await chrome.tabs.query({
+      url: ['https://leetcode.com/*', 'https://leetcode.cn/*']
+    });
+
+    for (const tab of tabs) {
+      try {
+        await chrome.tabs.sendMessage(tab.id, {
+          type: 'BACKUP_DATA',
+          data: payload
+        });
+        console.log('[LeetCurve] 数据已备份到 localStorage (tab:', tab.id, ')');
+        break; // 备份到一个标签页即可
+      } catch (_) { /* 该标签页可能没有加载 content script */ }
+    }
+  } catch (e) {
+    // 静默：tabs 权限不可用或无标签页时不影响正常流程
+    console.log('[LeetCurve] 备份跳过:', e.message);
+  }
+}
+
+/**
+ * 尝试从 LeetCode 标签页的 localStorage 恢复数据
+ * @returns {Object|null} 恢复的数据对象，或 null
+ */
+async function tryRestoreFromLocalStorage() {
+  try {
+    const tabs = await chrome.tabs.query({
+      url: ['https://leetcode.com/*', 'https://leetcode.cn/*']
+    });
+
+    for (const tab of tabs) {
+      try {
+        const response = await chrome.tabs.sendMessage(tab.id, {
+          type: 'RESTORE_DATA'
+        });
+        if (response && response.success && response.data) {
+          console.log('[LeetCurve] 从 localStorage 恢复数据成功 (tab:', tab.id, ')');
+          return response.data;
+        }
+      } catch (_) { /* 该标签页可能没有加载 content script */ }
+    }
+  } catch (e) {
+    console.log('[LeetCurve] 恢复跳过:', e.message);
+  }
+  return null;
+}
+
+/* ================================================================
  *  优先级算法（Priority Algorithm）
  * ================================================================
  *
@@ -108,6 +221,10 @@ async function logActivity() {
 
 /**
  * 计算单个题目的优先级分数
+ * 
+ * 使用"复习日"概念：以每天凌晨 2:00 为日期分界线。
+ * 例如 interval=1 表示隔 1 天复习：今天做的题，明天凌晨 2 点后即需复习。
+ * 
  * @param {Object} problem  - 题目数据对象
  * @param {Object} tagWeights - 用户自定义标签权重 { 'DP': 1.5, 'BFS': 1.3, ... }
  * @returns {number} 优先级分数
@@ -120,11 +237,15 @@ function calculatePriority(problem, tagWeights = {}) {
 
   const now = Date.now();
   const stageInfo = REVIEW_STAGES[problem.stage];
-  const intervalMs = stageInfo.interval * 3600000; // 小时 → 毫秒
-  const elapsed = now - problem.last_review_time;
+  const intervalDays = stageInfo.interval; // 天数
+
+  // 计算"复习日"差值（以凌晨 2 点为分界线）
+  const todayDay = getReviewDay(now);
+  const reviewDay = getReviewDay(problem.last_review_time);
+  const elapsedDays = todayDay - reviewDay;
 
   // 逾期比率：钳制到 >= 0，未到期的题目优先级为 0
-  const overdueRatio = Math.max(0, (elapsed - intervalMs) / intervalMs);
+  const overdueRatio = Math.max(0, (elapsedDays - intervalDays) / intervalDays);
 
   // 难度权重
   const diffWeight = DIFFICULTY_WEIGHTS[problem.difficulty] || 1.0;
@@ -484,14 +605,38 @@ chrome.runtime.onStartup.addListener(() => updateBadge());
 
 // 扩展安装 / 更新时初始化
 chrome.runtime.onInstalled.addListener(async (details) => {
-  if (details.reason === 'install') {
-    await chrome.storage.local.set({
-      problems: {},
-      settings: { tagWeights: {} },
-      activityLog: {}
-    });
-    console.log('[LeetCurve] 扩展已安装，存储初始化完成');
+  // 检查 chrome.storage.local 中是否已有数据
+  const existing = await chrome.storage.local.get(['problems', 'settings', 'activityLog']);
+  const hasData = existing.problems && Object.keys(existing.problems).length > 0;
+
+  if (!hasData) {
+    // 数据为空 → 尝试从 LeetCode 页面的 localStorage 恢复
+    console.log('[LeetCurve] chrome.storage.local 无数据，尝试从 localStorage 恢复...');
+    const backup = await tryRestoreFromLocalStorage();
+
+    if (backup && backup.problems && Object.keys(backup.problems).length > 0) {
+      // 恢复成功
+      await chrome.storage.local.set({
+        problems: backup.problems,
+        settings: backup.settings || { tagWeights: {} },
+        activityLog: backup.activityLog || {}
+      });
+      console.log(`[LeetCurve] 数据恢复成功！共 ${Object.keys(backup.problems).length} 道题目`);
+    } else {
+      // 无备份可恢复，初始化为空
+      const needInit = {};
+      if (!existing.problems) needInit.problems = {};
+      if (!existing.settings) needInit.settings = { tagWeights: {} };
+      if (!existing.activityLog) needInit.activityLog = {};
+      if (Object.keys(needInit).length > 0) {
+        await chrome.storage.local.set(needInit);
+      }
+      console.log('[LeetCurve] 无可恢复的备份，存储已初始化为空');
+    }
+  } else {
+    console.log('[LeetCurve] 检测到已有数据，跳过初始化');
   }
+
   await updateBadge();
 });
 

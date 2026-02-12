@@ -26,8 +26,8 @@
     },
     {
       "matches": [
-        "https://leetcode.com/problems/*",
-        "https://leetcode.cn/problems/*"
+        "https://leetcode.com/*",
+        "https://leetcode.cn/*"
       ],
       "js": ["content/content.js"],
       "run_at": "document_idle"
